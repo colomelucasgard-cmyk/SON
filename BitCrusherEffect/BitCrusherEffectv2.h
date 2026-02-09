@@ -22,8 +22,8 @@
  
  ************************************************************************/
 
-#ifndef faust_BitCrusherEffect_h_
-#define faust_BitCrusherEffect_h_
+#ifndef faust_BitCrusherEffectv2_h_
+#define faust_BitCrusherEffectv2_h_
 
 #include <string>
 
@@ -41,12 +41,12 @@ class MidiUI;
 class teensy_midi;
 #endif
 
-class BitCrusherEffect : public AudioStream
+class BitCrusherEffectv2 : public AudioStream
 {
     public:
     
-        BitCrusherEffect();
-        ~BitCrusherEffect();
+        BitCrusherEffectv2();
+        ~BitCrusherEffectv2();
     
         virtual void update(void);
     
