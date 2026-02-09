@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------
-name: "BitCrusherEffect"
+name: "BitCrusherEffectv2"
 Code generated with Faust 2.81.10 (https://faust.grame.fr)
 Compilation options: -a /usr/local/share/faust/teensy/teensy.cpp -lang cpp -i -ct 1 -es 1 -mcd 16 -mdd 1024 -mdy 33 -uim -single -ftz 0
 ------------------------------------------------------------ */
@@ -44,7 +44,7 @@ Compilation options: -a /usr/local/share/faust/teensy/teensy.cpp -lang cpp -i -c
 
 #include <string.h> // for memset
 
-#include "BitCrusherEffect.h"
+#include "BitCrusherEffectv2.h"
 
 // IMPORTANT: in order for MapUI to work, the teensy linker must be g++
 /************************** BEGIN MapUI.h ******************************
@@ -10330,6 +10330,9 @@ struct dsp_poly_factory : public dsp_factory {
 #define RESTRICT __restrict__
 #endif
 
+static float mydsp_faustpower2_f(float value) {
+	return value * value;
+}
 
 struct mydsp : public dsp {
 	
@@ -10337,6 +10340,9 @@ struct mydsp : public dsp {
 	int iVec0[2];
 	int iRec1[2];
 	int iVec1[2];
+	FAUSTFLOAT fCheckbox0;
+	float fRec2[3];
+	float fRec3[3];
 	float fRec0[2];
 	FAUSTFLOAT fHslider1;
 	int fSampleRate;
@@ -10348,8 +10354,34 @@ struct mydsp : public dsp {
 		m->declare("basics.lib/name", "Faust Basic Element Library");
 		m->declare("basics.lib/version", "1.22.0");
 		m->declare("compile_options", "-a /usr/local/share/faust/teensy/teensy.cpp -lang cpp -i -ct 1 -es 1 -mcd 16 -mdd 1024 -mdy 33 -uim -single -ftz 0");
-		m->declare("filename", "BitCrusherEffect.dsp");
-		m->declare("name", "BitCrusherEffect");
+		m->declare("filename", "BitCrusherEffectv2.dsp");
+		m->declare("filters.lib/fir:author", "Julius O. Smith III");
+		m->declare("filters.lib/fir:copyright", "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>");
+		m->declare("filters.lib/fir:license", "MIT-style STK-4.3 license");
+		m->declare("filters.lib/iir:author", "Julius O. Smith III");
+		m->declare("filters.lib/iir:copyright", "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>");
+		m->declare("filters.lib/iir:license", "MIT-style STK-4.3 license");
+		m->declare("filters.lib/lowpass0_highpass1", "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>");
+		m->declare("filters.lib/lowpass0_highpass1:author", "Julius O. Smith III");
+		m->declare("filters.lib/lowpass:author", "Julius O. Smith III");
+		m->declare("filters.lib/lowpass:copyright", "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>");
+		m->declare("filters.lib/lowpass:license", "MIT-style STK-4.3 license");
+		m->declare("filters.lib/name", "Faust Filters Library");
+		m->declare("filters.lib/tf2:author", "Julius O. Smith III");
+		m->declare("filters.lib/tf2:copyright", "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>");
+		m->declare("filters.lib/tf2:license", "MIT-style STK-4.3 license");
+		m->declare("filters.lib/tf2s:author", "Julius O. Smith III");
+		m->declare("filters.lib/tf2s:copyright", "Copyright (C) 2003-2019 by Julius O. Smith III <jos@ccrma.stanford.edu>");
+		m->declare("filters.lib/tf2s:license", "MIT-style STK-4.3 license");
+		m->declare("filters.lib/version", "1.7.1");
+		m->declare("maths.lib/author", "GRAME");
+		m->declare("maths.lib/copyright", "GRAME");
+		m->declare("maths.lib/license", "LGPL with exception");
+		m->declare("maths.lib/name", "Faust Math Library");
+		m->declare("maths.lib/version", "2.9.0");
+		m->declare("name", "BitCrusherEffectv2");
+		m->declare("platform.lib/name", "Generic Platform Library");
+		m->declare("platform.lib/version", "1.3.0");
 	}
 
 	virtual int getNumInputs() {
@@ -10368,6 +10400,7 @@ struct mydsp : public dsp {
 	
 	virtual void instanceResetUserInterface() {
 		fHslider0 = static_cast<FAUSTFLOAT>(1.0f);
+		fCheckbox0 = static_cast<FAUSTFLOAT>(0.0f);
 		fHslider1 = static_cast<FAUSTFLOAT>(16.0f);
 	}
 	
@@ -10381,8 +10414,14 @@ struct mydsp : public dsp {
 		for (int l2 = 0; l2 < 2; l2 = l2 + 1) {
 			iVec1[l2] = 0;
 		}
-		for (int l3 = 0; l3 < 2; l3 = l3 + 1) {
-			fRec0[l3] = 0.0f;
+		for (int l3 = 0; l3 < 3; l3 = l3 + 1) {
+			fRec2[l3] = 0.0f;
+		}
+		for (int l4 = 0; l4 < 3; l4 = l4 + 1) {
+			fRec3[l4] = 0.0f;
+		}
+		for (int l5 = 0; l5 < 2; l5 = l5 + 1) {
+			fRec0[l5] = 0.0f;
 		}
 	}
 	
@@ -10406,7 +10445,8 @@ struct mydsp : public dsp {
 	}
 	
 	virtual void buildUserInterface(UI* ui_interface) {
-		ui_interface->openVerticalBox("BitCrusherEffect");
+		ui_interface->openVerticalBox("BitCrusherEffectv2");
+		ui_interface->addCheckButton("AntiAlias", &fCheckbox0);
 		ui_interface->addHorizontalSlider("Bits", &fHslider1, FAUSTFLOAT(16.0f), FAUSTFLOAT(1.0f), FAUSTFLOAT(16.0f), FAUSTFLOAT(0.1f));
 		ui_interface->addHorizontalSlider("Downsample", &fHslider0, FAUSTFLOAT(1.0f), FAUSTFLOAT(1.0f), FAUSTFLOAT(5e+01f), FAUSTFLOAT(1.0f));
 		ui_interface->closeBox();
@@ -10415,20 +10455,35 @@ struct mydsp : public dsp {
 	virtual void compute(int count, FAUSTFLOAT** RESTRICT inputs, FAUSTFLOAT** RESTRICT outputs) {
 		FAUSTFLOAT* input0 = inputs[0];
 		FAUSTFLOAT* output0 = outputs[0];
-		int iSlow0 = static_cast<int>(static_cast<float>(fHslider0));
-		float fSlow1 = std::pow(2.0f, static_cast<float>(fHslider1)) + -1.0f;
-		float fSlow2 = 1.0f / fSlow1;
+		float fSlow0 = static_cast<float>(fHslider0);
+		int iSlow1 = static_cast<int>(fSlow0);
+		int iSlow2 = static_cast<int>(static_cast<float>(fCheckbox0));
+		float fSlow3 = std::tan(1.2566371f / fSlow0);
+		float fSlow4 = 2.0f * (1.0f - 1.0f / mydsp_faustpower2_f(fSlow3));
+		float fSlow5 = 1.0f / fSlow3;
+		float fSlow6 = (fSlow5 + -1.4142135f) / fSlow3 + 1.0f;
+		float fSlow7 = 1.0f / ((fSlow5 + 1.4142135f) / fSlow3 + 1.0f);
+		float fSlow8 = std::pow(2.0f, static_cast<float>(fHslider1)) + -1.0f;
+		float fSlow9 = 1.0f / fSlow8;
 		for (int i0 = 0; i0 < count; i0 = i0 + 1) {
 			iVec0[0] = 1;
-			iRec1[0] = (iVec0[1] + iRec1[1]) % iSlow0;
+			iRec1[0] = (iVec0[1] + iRec1[1]) % iSlow1;
 			int iTemp0 = iRec1[0] <= iRec1[1];
 			iVec1[0] = iTemp0;
 			int iTemp1 = (iVec1[1] <= 0) & (iTemp0 > 0);
-			fRec0[0] = fRec0[1] * static_cast<float>(1 - iTemp1) + static_cast<float>(input0[i0]) * static_cast<float>(iTemp1);
-			output0[i0] = static_cast<FAUSTFLOAT>(fSlow2 * std::round(fSlow1 * fRec0[0]));
+			float fTemp2 = static_cast<float>(input0[i0]);
+			fRec2[0] = fTemp2 - fSlow7 * (fSlow6 * fRec2[2] + fSlow4 * fRec2[1]);
+			float fTemp3 = ((iSlow2) ? fSlow7 * (fRec2[2] + fRec2[0] + 2.0f * fRec2[1]) : fTemp2);
+			fRec3[0] = fTemp3 - fSlow7 * (fSlow6 * fRec3[2] + fSlow4 * fRec3[1]);
+			fRec0[0] = fRec0[1] * static_cast<float>(1 - iTemp1) + ((iSlow2) ? fSlow7 * (fRec3[2] + fRec3[0] + 2.0f * fRec3[1]) : fTemp3) * static_cast<float>(iTemp1);
+			output0[i0] = static_cast<FAUSTFLOAT>(fSlow9 * std::round(fSlow8 * fRec0[0]));
 			iVec0[1] = iVec0[0];
 			iRec1[1] = iRec1[0];
 			iVec1[1] = iVec1[0];
+			fRec2[2] = fRec2[1];
+			fRec2[1] = fRec2[0];
+			fRec3[2] = fRec3[1];
+			fRec3[1] = fRec3[0];
 			fRec0[1] = fRec0[0];
 		}
 	}
@@ -10437,18 +10492,20 @@ struct mydsp : public dsp {
 
 #ifdef FAUST_UIMACROS
 	
-	#define FAUST_FILE_NAME "BitCrusherEffect.dsp"
+	#define FAUST_FILE_NAME "BitCrusherEffectv2.dsp"
 	#define FAUST_CLASS_NAME "mydsp"
 	#define FAUST_COMPILATION_OPIONS "-a /usr/local/share/faust/teensy/teensy.cpp -lang cpp -i -ct 1 -es 1 -mcd 16 -mdd 1024 -mdy 33 -uim -single -ftz 0"
 	#define FAUST_INPUTS 1
 	#define FAUST_OUTPUTS 1
-	#define FAUST_ACTIVES 2
+	#define FAUST_ACTIVES 3
 	#define FAUST_PASSIVES 0
 
+	FAUST_ADDCHECKBOX("AntiAlias", fCheckbox0);
 	FAUST_ADDHORIZONTALSLIDER("Bits", fHslider1, 16.0f, 1.0f, 16.0f, 0.1f);
 	FAUST_ADDHORIZONTALSLIDER("Downsample", fHslider0, 1.0f, 1.0f, 5e+01f, 1.0f);
 
 	#define FAUST_LIST_ACTIVES(p) \
+		p(CHECKBOX, AntiAlias, "AntiAlias", fCheckbox0, 0.0f, 0.0f, 1.0f, 1.0f) \
 		p(HORIZONTALSLIDER, Bits, "Bits", fHslider1, 16.0f, 1.0f, 16.0f, 0.1f) \
 		p(HORIZONTALSLIDER, Downsample, "Downsample", fHslider0, 1.0f, 1.0f, 5e+01f, 1.0f) \
 
@@ -10472,7 +10529,7 @@ std::list<GUI*> GUI::fGuiList;
 ztimedmap GUI::gTimedZoneMap;
 #endif
 
-BitCrusherEffect::BitCrusherEffect() : AudioStream(FAUST_INPUTS, new audio_block_t*[FAUST_INPUTS])
+BitCrusherEffectv2::BitCrusherEffectv2() : AudioStream(FAUST_INPUTS, new audio_block_t*[FAUST_INPUTS])
 {
 #ifdef NVOICES
     int nvoices = NVOICES;
@@ -10514,7 +10571,7 @@ BitCrusherEffect::BitCrusherEffect() : AudioStream(FAUST_INPUTS, new audio_block
 #endif
 }
 
-BitCrusherEffect::~BitCrusherEffect()
+BitCrusherEffectv2::~BitCrusherEffectv2()
 {
     delete fDSP;
     delete fUI;
@@ -10533,7 +10590,7 @@ BitCrusherEffect::~BitCrusherEffect()
 }
 
 template <int INPUTS, int OUTPUTS>
-void BitCrusherEffect::updateImp(void)
+void BitCrusherEffectv2::updateImp(void)
 {
 #if MIDICTRL
     // Process the MIDI messages received by the Teensy
@@ -10574,14 +10631,14 @@ void BitCrusherEffect::updateImp(void)
     }
 }
 
-void BitCrusherEffect::update(void) { updateImp<FAUST_INPUTS, FAUST_OUTPUTS>(); }
+void BitCrusherEffectv2::update(void) { updateImp<FAUST_INPUTS, FAUST_OUTPUTS>(); }
 
-void BitCrusherEffect::setParamValue(const std::string& path, float value)
+void BitCrusherEffectv2::setParamValue(const std::string& path, float value)
 {
     fUI->setParamValue(path, value);
 }
 
-float BitCrusherEffect::getParamValue(const std::string& path)
+float BitCrusherEffectv2::getParamValue(const std::string& path)
 {
     return fUI->getParamValue(path);
 }
