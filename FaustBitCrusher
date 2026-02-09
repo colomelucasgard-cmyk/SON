@@ -1,0 +1,19 @@
+import("stdfaust.lib");
+
+nBits = hslider("Bits", 16, 1, 16, 0.1); 
+ds_factor = hslider("Downsample", 1, 1, 50, 1); // 1 = normal, 50 = très lent
+
+
+//Quantification ie échelonnage vertical
+// Calcul nb niveaux (2^bits - 1)
+q_levels = 2.0^nBits - 1.0;
+// Les maths : on multiplie, on arrondit, on divise pour "salir" le son
+quantizer(x) = round(x * q_levels) / q_levels;
+
+// Downsampling ie échelonnage horizontal
+clock = ba.pulse(ds_factor); // On génère une impulsion tous les 'ds_factor' échantillons
+downsampler(x) = ba.latch(clock, x); //bloqueur : laisse passer la valeur tous les 'ds-factor' échantillons
+
+
+// On applique le downsampling puis la quantification
+process = downsampler : quantizer;
