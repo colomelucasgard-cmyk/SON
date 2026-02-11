@@ -1,71 +1,71 @@
-/************************************************************************
- FAUST Architecture File
- Copyright (C) 2019-2020 GRAME, Centre National de Creation Musicale
- ---------------------------------------------------------------------
- This Architecture section is free software; you can redistribute it
- and/or modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 3 of
- the License, or (at your option) any later version.
- 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
- 
- You should have received a copy of the GNU General Public License
- along with this program; If not, see <http://www.gnu.org/licenses/>.
- 
- EXCEPTION : As a special exception, you may create a larger work
- that contains this FAUST architecture section and distribute
- that work under terms of your choice, so long as this FAUST
- architecture section is not modified.
- 
- ************************************************************************/
+import("stdfaust.lib");
 
-#ifndef faust_testv_h_
-#define faust_testv_h_
+nBits = hslider("Bits", 16, 1, 16, 0.1); 
+ds_factor = hslider("Downsample", 1, 1, 50, 1);
 
-#include <string>
+filter_active = checkbox("AntiAlias"); 
 
-#include "Arduino.h"
-#include "AudioStream.h"
-#include "Audio.h"
 
-#define fprintf(X, Y, Z) Serial.printf(Y, Z)
+cutoff = (ma.SR / (2 * ds_factor))*0.8;
 
-class dsp;
-class MapUI;
 
-#if MIDICTRL
-class MidiUI;
-class teensy_midi;
-#endif
+anti_alias_filter = _ <: (filter_active, _, fi.lowpass(2, cutoff)) : select2;
 
-class testv : public AudioStream
-{
-    public:
-    
-        testv();
-        ~testv();
-    
-        virtual void update(void);
-    
-        void setParamValue(const std::string& path, float value);
-        float getParamValue(const std::string& path);
-    
-    private:
-    
-        template <int INPUTS, int OUTPUTS>
-        void updateImp(void);
-    
-        float** fInChannel;
-        float** fOutChannel;
-        MapUI* fUI;
-    #if MIDICTRL
-        teensy_midi* fMIDIHandler;
-        MidiUI* fMIDIInterface;
-    #endif
-        dsp* fDSP;
-};
 
-#endif
+q_levels = 2.0^nBits - 1.0;
+quantizer(x) = round(x * q_levels) / q_levels;
+
+clock = ba.pulse(ds_factor); 
+downsampler(x) = ba.latch(clock, x); 
+
+original_effect = anti_alias_filter : anti_alias_filter : downsampler : quantizer;
+
+
+//Vinyle
+
+vinyl_active = checkbox("Vinyl_Mode"); 
+wear = hslider("Vinyl_Wear", 0, 0, 1, 0.01);//ie "age" du vinyle
+
+// wow and flutter, ie  simulation des variations de vitesse du moteur
+wf_mix = wear * 0.003; // variation hauteur (pitch) avec 3ms
+lfo_wow = os.osc(0.5); // Oscillation lente d'un sinus 
+lfo_flutter = no.noise : fi.lowpass(1, 10); //bruit blanc + passe bas 10Hz pour éviter trop de grésillement
+
+//retard
+total_mod = (lfo_wow + lfo_flutter) * wf_mix;
+time_delay = (0.01 + total_mod) * ma.SR; //0.01 = éviter un retard causal puisque viariations de 3 ms 
+wow_flutter_effect = de.fdelay(2000, time_delay);
+
+// bruit
+hiss_vol = wear * 0.02; // Volume du souffle
+hiss = no.pink_noise * hiss_vol;
+
+// Craquements
+// On génère du bruit, on prend la valeur absolue, et on garde seulement les pics extrêmes
+//seuil_craquement = 1.0 - (wear * 0.002); // Le seuil baisse quand l'usure augmente
+//trigger = no.noise : abs : >(seuil_craquement);
+//son_craque = trigger * no.noise * 0.5; // On multiplie par du bruit pour varier le timbre du clic
+
+
+// Courbe RIAA simplifiée : Moins d'aigus quand le disque est vieux
+cutoff_age = 18000 - (wear * 12000); // Passe de 18kHz (neuf) à 6kHz (vieux)
+vinyl_filter = fi.highpass(1, 40) : fi.lowpass(2, cutoff_age);
+
+
+saturation = ma.tanh(_ * (1 + (wear * 0.5))); //Soft clipping en arrondissant notre signal avec tanh 
+
+
+// --- D. Assemblage de la chaîne Vinyle ---
+vinyl_chain = _ <: 
+    // Chemin 1 : Le signal audio traité (Wow -> Sat -> Filtre)
+    (wow_flutter_effect : saturation : vinyl_filter),
+    // Chemin 2 : Les bruits (Souffle + Craquements)
+    (hiss)
+    :> + ; // On mélange le tout
+
+// Sélecteur Final : Si "Vinyl_Mode" est coché, on applique l'effet, sinon on passe outre
+vinyl_stage = _ <: (vinyl_active, _, vinyl_chain) : select2;
+
+
+
+process = original_effect : vinyl_stage;
