@@ -1,5 +1,5 @@
 #include <Audio.h>
-#include "BitCrusherEffectv2.h" // Ton effet Faust
+#include "testv.h" // Ton effet Faust
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
@@ -7,7 +7,7 @@
 
 AudioInputUSB      usb1;           
 
-BitCrusherEffectv2 mycrusher;      // Ton effet
+testv mycrusher;      // Ton effet
 AudioOutputI2S     out;            // Sortie Casque (Shield)
 AudioControlSGTL5000 audioShield;
 
@@ -19,7 +19,7 @@ AudioConnection patchCord3(mycrusher, 0, out, 1);
 
 const int PIN_BOUTON = 3;    
 int etatBoutonPrecedent = HIGH; 
-bool filtreActif = false;
+bool vinylactif = false;
 
 void setup() {
   // Allouer assez de mémoire pour le tampon USB
@@ -39,6 +39,9 @@ void loop() {
   
   int lecturepot1 = analogRead(A0);
   float bitsvalue = (float)map(lecturepot1, 0, 1023, 16, 2); 
+
+  int lecturepot3 = analogRead(A8);
+  float vinylmode = (float)map(lecturepot3, 0, 1023, 1, 0); 
   
   int lecturepot2 = analogRead(A2); 
   float Dsvalue = (float)map(lecturepot2, 0, 1023, 1, 50);
@@ -48,17 +51,18 @@ void loop() {
 
   mycrusher.setParamValue("Bits", bitsvalue);       
   mycrusher.setParamValue("Downsample", Dsvalue);
+  mycrusher.setParamValue("Vinyl_Wear", vinylmode);   
 
   if (lectureBouton == LOW && etatBoutonPrecedent == HIGH) {
     // 1. On inverse l'état du filtre
-    filtreActif = !filtreActif; 
+    vinylactif = !vinylactif; 
     
     // 2. On envoie la commande à Faust (0 ou 1)
-    if (filtreActif) {
-      mycrusher.setParamValue("AntiAlias", 1.0);
+    if (vinylactif) {
+      mycrusher.setParamValue("Vinyl_Mode", 1.0);
       Serial.println("Filtre: ON"); // Utile pour vérifier
     } else {
-      mycrusher.setParamValue("AntiAlias", 0.0);
+      mycrusher.setParamValue("Vinyl_Mode", 0.0);
       Serial.println("Filtre: OFF");
     }
   delay(50);
