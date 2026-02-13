@@ -18,4 +18,118 @@ quantizer(x) = round(x * q_levels) / q_levels;
 clock = ba.pulse(ds_factor); 
 downsampler(x) = ba.latch(clock, x); 
 
-process = anti_alias_filter : anti_alias_filter : downsampler : quantizer;
+original_effect = anti_alias_filter : anti_alias_filter : downsampler : quantizer;
+
+
+//Vinyle
+
+vinyl_active = checkbox("Vinyl_Mode"); 
+wear = hslider("Vinyl_Wear", 0, 0, 1, 0.01);//ie "age" du vinyle
+
+// wow and flutter, ie  simulation des variations de vitesse du moteur du vinyle
+wf_mix = wear * 0.005; // variation hauteur (pitch) avec 3ms (irrégularité du lecteur)
+lfo_wow = os.osc(0.5); // Oscillation lente d'un sinus -> simuler irrégularité forme disque -> (30tr/min)/60 sec = 0.5 Hz
+lfo_flutter = no.noise : fi.lowpass(1, 10); //bruit blanc + passe bas 10Hz pour éviter trop de grésillement
+
+//retard
+total_mod = (lfo_wow + lfo_flutter) * wf_mix;
+time_delay = (0.01 + total_mod) * ma.SR; //0.01 = éviter un retard qui entraine a un systeme non causal puisque viariations de 3 ms 
+wow_flutter_effect = de.fdelay(2000, time_delay);
+
+// bruit
+hiss_vol = wear * 0.02; // Volume du souffle
+hiss = no.pink_noise * hiss_vol;
+
+// Craquements
+// On génère du bruit, on prend la valeur absolue, et on garde seulement les pics extrêmes
+seuil_craquement = 1.0 - (wear * 0.0005); // Le seuil baisse quand l'usure augmente
+trigger = no.noise : abs : >(seuil_craquement);
+son_craque = trigger * no.noise * 0.2; // On multiplie par du bruit pour varier le timbre du clic
+
+
+// Courbe RIAA : moins d'aigus quand le disque est vieux
+cutoff_age = 18000 - (wear * 12000); // Passe de 18kHz (neuf) à 6kHz (vieux)
+vinyl_filter = fi.highpass(1, 40) : fi.lowpass(2, cutoff_age);
+
+
+saturation = ma.tanh(_ * (1 + (wear * 0.5))); //Soft clipping en arrondissant notre signal avec tanh  = garder harmoniques impaires car mieux à écouter
+
+
+// --- D. Assemblage de la chaîne Vinyle ---
+vinyl_chain = _ <: 
+    // Chemin 1 : Le signal audio traité (Wow -> Sat -> Filtre)
+    (wow_flutter_effect : saturation : vinyl_filter),
+    // Chemin 2 : Les bruits (Souffle + Craquements)
+    (hiss + son_craque)
+    :> + ; // On mélange le tout
+
+// Sélecteur Final : Si "Vinyl_Mode" est coché, on applique l'effet, sinon on passe outre
+vinyl_stage = _ <: (vinyl_active, _, vinyl_chain) : select2;
+
+
+// FLANGER
+
+
+// Activation et Contrôle
+flanger_active = checkbox("Flanger_Mode");
+ffComb(del,ff) = _ <: _, de.fdelay(512, del)*ff :> _; //interpolation
+
+flanger(freq,depth,ff) = ffComb(del,ff)
+with{
+  // Conversion du LFO pour avoir un délai toujours positif et fluide
+  // Un flanger classique oscille souvent entre 1ms et 5ms
+  del = (os.osc(freq) + 1) * 0.5 * depth; // Oscille entre 0 et depth
+};
+
+freq = hslider("freq", 0.8, 0.1, 5, 0.01) : si.smoo; // Vitesse lente par défaut
+depth = hslider("depth", 295, 0, 500, 0.1) : si.smoo; // Profondeur en échantillons
+ff = hslider("Mix_DryWet", 1, 0, 1, 0.01) : si.smoo; // Dosage de l'effet
+
+// 2. Je sépare le calcul de l'effet
+effect_signal = _ : flanger(freq,depth,ff);
+
+flanger_stage = _ <: (flanger_active, _, effect_signal) : select2;
+// Glitch/Freeze
+
+freeze_btn = checkbox("Freeze_Trig"); 
+freeze_len = hslider("Freeze_Len", 0.25, 0.01, 0.5, 0.001); 
+
+
+// si.smoo crée une petite pente douce (environ 10ms)
+freeze_smooth = freeze_btn : si.smoo;
+
+// --- Mémoire ---
+MAX_BUF = 48000; // 1 seconde de mémoire max
+
+
+// Si Freeze = ON, on veut arrêter d'écrire pour ne pas écraser la boucle.
+// write_enable vaut 1 quand on joue, et 0 quand on freeze.
+write_enable = 1 - freeze_btn; 
+
+// Le pointeur d'écriture n'avance que si write_enable est vrai
+// On utilise un compteur qui s'arrête net quand on appuie.
+write_idx = +(write_enable) % MAX_BUF ~ _;
+
+// On détecte le moment exact où on appuie pour savoir où finir la boucle
+trig_edge = freeze_btn > freeze_btn'; 
+snapshot_pos = ba.latch(trig_edge, write_idx);
+
+len_samps = freeze_len * ma.SR;
+// Le lecteur tourne en permanence
+read_phase = os.phasor(1.0, 1.0/freeze_len);
+
+// Calcul de l'index de lecture
+// On lit en arrière par rapport au point de snapshot
+raw_read_idx = snapshot_pos - len_samps + (read_phase * len_samps);
+read_idx = (raw_read_idx % MAX_BUF + MAX_BUF) % MAX_BUF;
+
+// "input * write_enable" : on n'envoie plus rien dans la mémoire quand on freeze
+buffer_data = rwtable(MAX_BUF, 0.0, write_idx, _ * write_enable, read_idx);
+
+
+// Au lieu d'un select2 on utilise un mélangeur linéaire.
+// freeze_smooth = 0 -> On entend 100% de l'entrée, 0% du buffer
+// freeze_smooth = 1 -> On entend 0% de l'entrée, 100% du buffer
+freeze_stage = _ <: (*(1 - freeze_smooth), buffer_data * freeze_smooth) :> +;
+
+process = original_effect : vinyl_stage : flanger_stage : freeze_stage ;
