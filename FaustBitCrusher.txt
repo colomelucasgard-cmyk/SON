@@ -1,0 +1,21 @@
+import("stdfaust.lib");
+
+nBits = hslider("Bits", 16, 1, 16, 0.1); 
+ds_factor = hslider("Downsample", 1, 1, 50, 1);
+
+filter_active = checkbox("AntiAlias"); 
+
+
+cutoff = (ma.SR / (2 * ds_factor))*0.8;
+
+
+anti_alias_filter = _ <: (filter_active, _, fi.lowpass(2, cutoff)) : select2;
+
+
+q_levels = 2.0^nBits - 1.0;
+quantizer(x) = round(x * q_levels) / q_levels;
+
+clock = ba.pulse(ds_factor); 
+downsampler(x) = ba.latch(clock, x); 
+
+process = anti_alias_filter : anti_alias_filter : downsampler : quantizer;
