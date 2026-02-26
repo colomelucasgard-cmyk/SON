@@ -27,7 +27,7 @@ vinyl_active = checkbox("Vinyl_Mode");
 wear = hslider("Vinyl_Wear", 0, 0, 1, 0.01);//ie "age" du vinyle
 
 // wow and flutter, ie  simulation des variations de vitesse du moteur du vinyle
-wf_mix = wear * 0.005; // variation hauteur (pitch) avec 3ms (irrégularité du lecteur)
+wf_mix = wear * 0.005; // variation hauteur (pitch) avec 5ms (irrégularité du lecteur)
 lfo_wow = os.osc(0.5); // Oscillation lente d'un sinus -> simuler irrégularité forme disque -> (30tr/min)/60 sec = 0.5 Hz
 lfo_flutter = no.noise : fi.lowpass(1, 10); //bruit blanc + passe bas 10Hz pour éviter trop de grésillement
 
@@ -44,7 +44,7 @@ hiss = no.pink_noise * hiss_vol;
 // On génère du bruit, on prend la valeur absolue, et on garde seulement les pics extrêmes
 seuil_craquement = 1.0 - (wear * 0.0005); // Le seuil baisse quand l'usure augmente
 trigger = no.noise : abs : >(seuil_craquement);
-son_craque = trigger * no.noise * 0.2; // On multiplie par du bruit pour varier le timbre du clic
+son_craque = trigger * no.noise * 0.05; // On multiplie par du bruit pour varier le timbre du clic
 
 
 // Courbe RIAA : moins d'aigus quand le disque est vieux
@@ -131,5 +131,7 @@ buffer_data = rwtable(MAX_BUF, 0.0, write_idx, _ * write_enable, read_idx);
 // freeze_smooth = 0 -> On entend 100% de l'entrée, 0% du buffer
 // freeze_smooth = 1 -> On entend 0% de l'entrée, 100% du buffer
 freeze_stage = _ <: (*(1 - freeze_smooth), buffer_data * freeze_smooth) :> +;
+
+process = original_effect : vinyl_stage : flanger_stage : freeze_stage ;
 
 process = original_effect : vinyl_stage : flanger_stage : freeze_stage ;
